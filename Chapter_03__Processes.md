@@ -521,3 +521,117 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 
 void __noreturn do_exit(long code)
 ```
+
+
+********
+
+2024 年 11 月 7 日
+
+```c
+// file: kernel/fork.c
+
+// sys_fork
+SYSCALL_DEFINE0(fork)
+{
+#ifdef CONFIG_MMU
+    struct kernel_clone_args args = {
+        .exit_signal = SIGCHLD,
+    };
+
+    return kernel_clone(&args);
+#else
+    /* can not support in nommu mode */
+    return -EINVAL;
+#endif
+}
+
+// sys_vfork
+SYSCALL_DEFINE0(vfork)
+{
+    struct kernel_clone_args args = {
+        .flags          = CLONE_VFORK | CLONE_VM,
+        .exit_signal    = SIGCHLD,
+    };
+
+    return kernel_clone(&args);
+}
+
+// sys_clone has many prototypes, annoying!!
+SYSCALL_DEFINEx(clone, ...)
+{
+    struct kernel_clone_args args = {
+        .flags          = (lower_32_bits(clone_flags) & ~CSIGNAL),
+        .pidfd          = parent_tidptr,
+        .child_tid      = child_tidptr,
+        .parent_tid     = parent_tidptr,
+        .exit_signal    = (lower_32_bits(clone_flags) & CSIGNAL),
+        .stack          = newsp,
+        .tls            = tls,
+    };
+
+    return kernel_clone(&args);
+}
+
+// header file: include/linux/sched/task.h
+struct kernel_clone_args {
+    u64 flags;
+    int __user *pidfd;
+    int __user *child_tid;
+    int __user *parent_tid;
+    const char *name;
+    int exit_signal;
+    u32 kthread:1;          // bit-field
+    u32 io_thread:1;
+    u32 user_worker:1;
+    u32 no_files:1;
+    unsigned long stack;
+    unsigned long stack_size;
+    unsigned long tls;
+    pid_t *set_tid;
+    /* Number of elements in *set_tid */
+    size_t set_tid_size;
+    int cgroup;
+    int idle;
+    int (*fn)(void *);
+    void *fn_arg;
+    struct cgroup *cgrp;
+    struct css_set *cset;
+};
+
+// header file: include/uapi/linux/sched.h
+
+/*
+ * cloning flags:
+ */
+#define CSIGNAL                 0x000000ff    /* signal mask to be sent at exit */
+#define CLONE_VM                0x00000100    /* set if VM shared between processes */
+#define CLONE_FS                0x00000200    /* set if fs info shared between processes */
+#define CLONE_FILES             0x00000400    /* set if open files shared between processes */
+#define CLONE_SIGHAND           0x00000800    /* set if signal handlers and blocked signals shared */
+#define CLONE_PIDFD             0x00001000    /* set if a pidfd should be placed in parent */
+#define CLONE_PTRACE            0x00002000    /* set if we want to let tracing continue on the child too */
+#define CLONE_VFORK             0x00004000    /* set if the parent wants the child to wake it up on mm_release */
+#define CLONE_PARENT            0x00008000    /* set if we want to have the same parent as the cloner */
+#define CLONE_THREAD            0x00010000    /* Same thread group? */
+#define CLONE_NEWNS             0x00020000    /* New mount namespace group */
+#define CLONE_SYSVSEM           0x00040000    /* share system V SEM_UNDO semantics */
+#define CLONE_SETTLS            0x00080000    /* create a new TLS for the child */
+#define CLONE_PARENT_SETTID     0x00100000    /* set the TID in the parent */
+#define CLONE_CHILD_CLEARTID    0x00200000    /* clear the TID in the child */
+#define CLONE_DETACHED          0x00400000    /* Unused, ignored */
+#define CLONE_UNTRACED          0x00800000    /* set if the tracing process can't force CLONE_PTRACE on this clone */
+#define CLONE_CHILD_SETTID      0x01000000    /* set the TID in the child */
+#define CLONE_NEWCGROUP         0x02000000    /* New cgroup namespace */
+#define CLONE_NEWUTS            0x04000000    /* New utsname namespace */
+#define CLONE_NEWIPC            0x08000000    /* New ipc namespace */
+#define CLONE_NEWUSER           0x10000000    /* New user namespace */
+#define CLONE_NEWPID            0x20000000    /* New pid namespace */
+#define CLONE_NEWNET            0x40000000    /* New network namespace */
+#define CLONE_IO                0x80000000    /* Clone io context */
+```
+
+各个 macro 的含义可以查看 [Linux manual page](https://www.man7.org/linux/man-pages/man2/clone.2.html)
+
+`CLONE_VM` 的作用是让父进程和子进程共享同一个内存地址空间
+
+`CLONE_VFORK` 使得子进程在执行 execve 或 exit 之前，父进程会被阻塞。
