@@ -387,6 +387,35 @@ enum
 
 软中断的下标越低优先级越高
 
+```c
+// file: kernel/softirq.c
+
+void __init softirq_init(void)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		per_cpu(tasklet_vec, cpu).tail =
+			&per_cpu(tasklet_vec, cpu).head;
+		per_cpu(tasklet_hi_vec, cpu).tail =
+			&per_cpu(tasklet_hi_vec, cpu).head;
+	}
+
+	open_softirq(TASKLET_SOFTIRQ, tasklet_action);
+	open_softirq(HI_SOFTIRQ, tasklet_hi_action);
+}
+```
+
+```c
+// file: kernel/time/hrtimer.c
+
+void __init hrtimers_init(void)
+{
+	hrtimers_prepare_cpu(smp_processor_id());
+	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);
+}
+```
+
 ### 软中断所使用的数据结构
 
 表示软中断的主要数据结构是 softirq_vec 数组
