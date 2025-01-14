@@ -245,6 +245,8 @@ struct list_head {
 #define ENOPARAM          519    /* Parameter not supported */
 ```
 
+I guess `ERESTARTSYS` means "restart syscall"
+
 ### 读/写信号量
 
 读/写信号量是由 `rw_semaphore` 结构描述的
